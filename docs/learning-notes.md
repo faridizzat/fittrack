@@ -1,6 +1,85 @@
 # FitTrack — Learning Notes
 
-A running log of what we built, why we built it that way, and key concepts explained along the way.
+Concepts, architecture, and the "why" behind every decision. Updated as we build.
+
+---
+
+## Project Reference
+
+### Architecture
+
+```
+[React Frontend — GitHub Pages]
+        │
+        ▼
+[Spring Boot API — Render]
+        │
+        ├── Auth Service (JWT)
+        ├── Workout Service (CRUD)
+        ├── Webhook Service (fires on workout completion, HMAC-signed)
+        └── AI Service ──► Claude API
+                │
+                ▼
+           [Supabase PostgreSQL]
+                │
+                ▼
+      [Prometheus /actuator/prometheus]
+                │
+                ▼
+      [Grafana Cloud — metrics, logs, alerts]
+```
+
+### Tech Stack
+
+| Layer | Tool |
+|---|---|
+| Backend | Spring Boot 3, Spring Security, JPA/Hibernate |
+| Frontend | React + Vite + Tailwind CSS |
+| Database | Supabase (PostgreSQL) |
+| Auth | JWT in HttpOnly cookie |
+| Frontend Hosting | GitHub Pages |
+| Backend Hosting | Render.com (cold start after 15min idle) |
+| CI/CD | GitHub Actions → GHCR → Render deploy hook |
+| Monitoring | Grafana Cloud + Prometheus + Loki |
+| Code Quality | SonarQube Cloud |
+| AI | Claude API (claude-sonnet-4-20250514) |
+
+### Package Structure
+
+```
+com.fittrack.auth        → JWT, login, register
+com.fittrack.workout     → CRUD, business logic
+com.fittrack.webhook     → event firing, HMAC signing, delivery logs
+com.fittrack.ai          → Claude API integration
+com.fittrack.user        → User entity, Role enum
+com.fittrack.config      → Security, beans
+```
+
+### Environment Variables
+
+```
+SUPABASE_DB_PASSWORD     → Supabase database password
+JWT_SECRET               → Base64-encoded 32-byte signing key
+JWT_EXPIRATION_MS        → Token lifetime in ms (e.g. 86400000 = 1 day)
+ANTHROPIC_API_KEY        → Claude API key (Sprint 6+)
+WEBHOOK_HMAC_SECRET      → HMAC signing secret (Sprint 7+)
+```
+
+Local dev: put secrets in `.env` (gitignored), export before running:
+```bash
+export $(cat .env | xargs) && ./mvnw spring-boot:run
+```
+
+Prod: set as environment variables on Render dashboard.
+
+### Coding Conventions
+
+- Controller → Service → Repository — never skip layers
+- DTOs for all API request/response — never expose JPA entities directly
+- Constructor injection only — never `@Autowired` field injection
+- JWT in HttpOnly cookie — never localStorage
+- `Optional` properly — never call `.get()` without `.isPresent()`
+- Spring profiles: `dev` for local, `prod` for Render
 
 ---
 
@@ -13,7 +92,7 @@ A running log of what we built, why we built it that way, and key concepts expla
 **What we built:**
 - Deleted `application.properties` (Spring Initializr default)
 - Created `application.yml` — base config for all environments
-- `application-dev.yml` — local dev overrides (to be filled with Supabase credentials)
+- `application-dev.yml` — local dev overrides (Supabase credentials)
 - `application-prod.yml` — Render/production overrides
 
 **Why 3 files?**
@@ -87,8 +166,6 @@ spring.datasource.username=postgres
 
 **Why `postgresql` is `runtime`:**
 You never import `org.postgresql.*` directly in your code. You use Spring's `DataSource` abstraction and the driver loads automatically underneath. Marking it `runtime` enforces that — Maven stops you from importing internals at compile time, but the driver is still packaged in the JAR.
-
----
 
 ---
 
@@ -166,23 +243,19 @@ A user with that email might not exist. If you return plain `User`, Spring retur
 `Optional<User>` makes the "might not exist" case explicit in the type. The caller is forced to handle it:
 
 ```java
-// Throw a meaningful exception (what we'll do in AuthService)
+// Throw a meaningful exception (what we do in AuthService)
 User user = userRepository.findByEmail(email)
     .orElseThrow(() -> new UsernameNotFoundException("User not found"));
 
-// Or check first
+// Or check presence first
 if (userRepository.findByEmail(email).isPresent()) { ... }
 ```
 
-Convention from CLAUDE.md: never call `.get()` on an Optional without checking `.isPresent()` first — that throws `NoSuchElementException`, which is just as bad as a NPE.
-
----
+Convention: never call `.get()` on an Optional without checking `.isPresent()` first — that throws `NoSuchElementException`, which is just as bad as a NPE.
 
 ---
 
 ### JPA vs Hibernate vs Spring Data JPA — What's the Difference?
-
-These three are often confused because they stack on top of each other.
 
 **JPA — Just a Specification**
 JPA (Jakarta Persistence API) is not a library — it's a document. A set of rules that says how Java objects should map to database tables and what the API looks like. It defines the annotations (`@Entity`, `@Table`, `@Id`) and the core interface (`EntityManager`), but has no runnable code itself.
@@ -216,29 +289,6 @@ Supabase PostgreSQL
 
 ---
 
-### Is JPA/Hibernate Required in Spring Boot?
-
-No — Spring Boot is just a framework, persistence is a separate concern you plug in. Alternatives:
-
-| Option | What it is | Use when |
-|---|---|---|
-| **Spring Data JDBC** | Simpler Spring Data, no Hibernate, plain SQL for complex queries | Want control without ORM magic |
-| **JOOQ** | Type-safe SQL in Java — typos in table/column names caught at compile time | SQL control without string queries |
-| **JdbcTemplate** | Raw SQL strings, Spring handles connection boilerplate | Maximum control, fully predictable |
-| **MyBatis** | SQL in XML/annotations bound to Java methods | Enterprise preference, explicit mapping |
-
-**Why we use JPA/Hibernate in FitTrack:**
-- Industry default — you'll see it in most Spring Boot jobs
-- CRUD for `User`, `Workout` etc. takes minutes with `JpaRepository`
-- `ddl-auto: update` means Hibernate creates/alters tables automatically during dev
-- Spring Security + JPA entity is a well-worn pattern with tons of examples
-
-If this were a high-throughput system with complex reporting queries, JOOQ or plain JDBC would be worth considering. For a learning project with straightforward entities, JPA is the right call.
-
----
-
----
-
 ### JwtService (`com.fittrack.auth.JwtService`)
 
 **What it does:**
@@ -263,11 +313,10 @@ Injects a value from `application.yml` into the field at runtime. The chain is:
 ```
 Environment variable (JWT_SECRET)
         ↓
-application.yml → jwt.secret: ${JWT_SECRET}
+Spring property: jwt.secret
         ↓
 @Value("${jwt.secret}") → secretKey field
 ```
-Keeps config centralised in yml — you can override per environment or swap the source later without touching Java code.
 
 **The `extractClaim` generic method:**
 ```java
@@ -278,15 +327,6 @@ private <T> T extractClaim(String token, Function<Claims, T> claimsResolver)
 extractClaim(token, Claims::getSubject);     // T = String
 extractClaim(token, Claims::getExpiration);  // T = Date
 ```
-Without it, you'd need a separate method for every field you want to extract.
-
-**Method references (`Claims::getSubject`):**
-Shorthand for a lambda. These are identical:
-```java
-claims -> claims.getSubject()   // lambda
-Claims::getSubject              // method reference
-```
-Fits `Function<Claims, T>` — takes a `Claims`, returns something.
 
 **`getSigningKey()`:**
 Decodes the Base64 secret from config into a cryptographic `Key`. JJWT uses this to sign tokens on generation and verify the signature on parse. If the secret doesn't match, parsing throws an exception — the token is rejected.
@@ -298,14 +338,8 @@ Decodes the Base64 secret from config into a cryptographic `Key`. JJWT uses this
 **What it does:**
 Wires up the three beans Spring Security needs to function before any request arrives.
 
-**`@Configuration`:**
-Tells Spring this class is a source of bean definitions. Spring scans it at startup and runs all `@Bean` methods.
-
-**`@Bean`:**
-Marks a method as a bean factory. Spring calls it once at startup, stores the returned object in the **application context** (a shared registry). Anywhere that needs a `PasswordEncoder`, Spring pulls the same instance out — you never call `new` manually.
-
 **`UserDetailsService`:**
-Spring Security interface with one method: `loadUserByUsername(String username)`. We implement it as a lambda — look up the user by email or throw `UsernameNotFoundException`. This is the bridge:
+Spring Security interface with one method: `loadUserByUsername(String username)`. We implement it as a lambda — look up the user by email or throw `UsernameNotFoundException`. Bridge:
 ```
 Spring Security → UserDetailsService → UserRepository → Database
 ```
@@ -319,10 +353,8 @@ Spring Security's built-in class for DB-backed authentication. You give it `User
 2. Verifies the raw password against the stored hash via `PasswordEncoder`
 3. Returns an authenticated token if both pass, throws if not
 
-Note: in Spring Security 6+ (Spring Boot 3.x), pass `UserDetailsService` directly to the constructor — the no-arg constructor is deprecated.
-
 **`AuthenticationManager`:**
-The single entry point for authentication. Receives credentials and delegates to the registered `AuthenticationProvider`. Exposed as a `@Bean` so `AuthService` can inject and call it manually during login:
+The single entry point for authentication. Exposed as a `@Bean` so `AuthService` can inject and call it manually during login:
 ```java
 authenticationManager.authenticate(
     new UsernamePasswordAuthenticationToken(email, password)
@@ -341,7 +373,7 @@ DaoAuthenticationProvider → UserDetailsService → loads User from DB
         ↓
 DaoAuthenticationProvider → PasswordEncoder → verifies password
         ↓
-Authentication passes → JwtService generates token → returned to client
+Authentication passes → JwtService generates token → cookie set on response
 ```
 
 ---
@@ -352,67 +384,139 @@ Authentication passes → JwtService generates token → returned to client
 Intercepts every incoming HTTP request, checks for a JWT in the `Authorization` header, validates it, and if valid, stamps the current request as authenticated before it reaches any controller.
 
 **Why `extends OncePerRequestFilter`?**
-Spring's filter chain can theoretically call a filter more than once per request (e.g. during forwards or async dispatch). `OncePerRequestFilter` is a base class that guarantees `doFilterInternal` runs exactly once per request — no double-processing.
-
-**What is the filter chain?**
-Spring Security processes every request through a sequence of filters before it reaches your controller. Each filter does its job, then calls `filterChain.doFilter(request, response)` to pass control to the next filter. If you don't call it, the request stops there. `JwtAuthenticationFilter` sits in this chain — it validates the token and then passes the request along.
+Spring's filter chain can theoretically call a filter more than once per request (e.g. during forwards or async dispatch). `OncePerRequestFilter` guarantees `doFilterInternal` runs exactly once per request.
 
 **`doFilterInternal` — step by step:**
 
-```java
-String authHeader = request.getHeader("Authorization");
-if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-    filterChain.doFilter(request, response);
-    return;
-}
 ```
-Step 1-2: Read the `Authorization` header. If missing or not a Bearer token → pass through immediately. Public endpoints (login, register) won't have a token — this lets them through.
+Step 1: Read Authorization header
+  → Missing or not "Bearer ..." → pass through (login/register have no token)
 
-```java
-String token = authHeader.substring(7);
-String username = jwtService.extractUsername(token);
-```
-Step 3-4: Strip `"Bearer "` (7 chars) to get the raw token. Extract the `sub` (email) from it. If the token is malformed or expired, `extractUsername` throws — Spring handles the exception and returns 401.
+Step 2: Extract token and username from it
+  → Malformed/expired token → extractUsername throws → Spring returns 401
 
-```java
-if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-```
-Step 5: Only proceed if we got a username AND the request isn't already authenticated. Prevents re-authenticating on the same request.
+Step 3: Only proceed if username found AND request not already authenticated
 
-```java
-    UserDetails userDetails = userDetailsService.loadUserByUsername(username);
-    if (jwtService.isTokenValid(token, userDetails)) {
-        UsernamePasswordAuthenticationToken authToken =
-                new UsernamePasswordAuthenticationToken(
-                        userDetails, null, userDetails.getAuthorities());
-        authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-        SecurityContextHolder.getContext().setAuthentication(authToken);
-    }
-```
-Step 6: Load the full user from DB. Validate the token (email matches + not expired). If valid, create a `UsernamePasswordAuthenticationToken` — Spring Security's object representing an authenticated user. The three arguments: principal (user), credentials (null — we don't store the password here), authorities (roles). Attach request metadata with `setDetails`. Write it into `SecurityContextHolder` — this marks the request as authenticated for the rest of the filter chain and the controller.
+Step 4: Load full user from DB, validate token
+  → Valid → write UsernamePasswordAuthenticationToken into SecurityContextHolder
+  → Invalid → skip (downstream security config will reject the request)
 
-```java
-filterChain.doFilter(request, response);
+Step 5: Always call filterChain.doFilter() to continue the chain
 ```
-Always call this at the end to continue the chain — whether auth succeeded or not. The security config will block the request later if it reaches a protected endpoint without auth.
 
 **`SecurityContextHolder`:**
-Thread-local storage Spring Security uses to track the current request's authentication. Setting auth here → every component (controllers, services) can call `SecurityContextHolder.getContext().getAuthentication()` to know who is logged in. Cleared automatically after each request.
+Thread-local storage Spring Security uses to track the current request's authentication. Setting auth here → every component can call `SecurityContextHolder.getContext().getAuthentication()` to know who is logged in. Cleared automatically after each request.
 
 **The full picture:**
 ```
 Incoming request
       ↓
-JwtAuthenticationFilter.doFilterInternal()
-  → No token → pass through (login/register endpoints)
+JwtAuthenticationFilter
+  → No token → pass through
   → Token found → validate → set SecurityContext
       ↓
-Rest of filter chain
-      ↓
-SecurityConfig checks: is this endpoint public or protected?
+SecurityConfig checks: public or protected endpoint?
   → Protected + not authenticated → 403
   → Public or authenticated → controller runs
 ```
+
+---
+
+### Auth DTOs (`com.fittrack.auth.dto`)
+
+**What we built:**
+- `RegisterRequest.java` — fields: `name`, `email`, `password`
+- `LoginRequest.java` — fields: `email`, `password`
+- `AuthResponse.java` — fields: `email`, `role`, `message`
+
+**Why DTOs and not just the `User` entity?**
+The `User` entity is a JPA object tied to the database — it contains `password` (hashed), internal fields like `id`, and Spring Security internals from implementing `UserDetails`. Returning it directly in an API response would expose all of that to the client. DTOs are purpose-built shapes: you put exactly what the caller needs, nothing more.
+
+> Rule: entities cross the DB boundary, DTOs cross the API boundary. Never mix the two.
+
+**`@Data` vs `@Builder` — when to use which:**
+| Annotation | Generates | Use when |
+|---|---|---|
+| `@Data` | Getters, setters, `equals`, `hashCode`, `toString` | Spring/Jackson builds the object for you (deserialization) |
+| `@Builder` | `MyClass.builder()...build()` pattern | You construct the object yourself in code |
+
+`RegisterRequest` and `LoginRequest` use only `@Data` — Spring's Jackson library reads the incoming JSON body and calls setters to populate the fields. You never construct them manually.
+
+`AuthResponse` uses `@Builder` because `AuthService` constructs it:
+```java
+AuthResponse.builder()
+    .email(user.getEmail())
+    .role(user.getRole().name())
+    .message("Login successful")
+    .build();
+```
+
+**Why no `token` field in `AuthResponse`?**
+The JWT goes in an **HttpOnly cookie**, not the response body:
+```
+POST /api/auth/login
+  → AuthService validates credentials
+  → JwtService generates token
+  → Set-Cookie: jwt=...; HttpOnly; SameSite=Strict  (on the HTTP response)
+  → Body: { email, role, message }
+```
+
+HttpOnly means JavaScript cannot read the cookie — it's sent automatically by the browser on every request but invisible to `document.cookie`. If the token were in the body, the frontend might store it in `localStorage`, which any JS (including injected XSS scripts) can read.
+
+---
+
+### AuthService (`com.fittrack.auth.AuthService`)
+
+**What it does:**
+Business logic for register and login. Both methods accept `HttpServletResponse` so they can write the JWT cookie directly onto the HTTP response.
+
+**`register` flow:**
+```
+1. Check if email exists → throw IllegalStateException if duplicate
+2. Hash password with BCrypt via PasswordEncoder
+3. Build and save User entity (role defaults to USER)
+4. Generate JWT via JwtService
+5. Write JWT as HttpOnly cookie on the response
+6. Return AuthResponse (email, role, message)
+```
+
+**`login` flow:**
+```
+1. AuthenticationManager.authenticate() — delegates to DaoAuthenticationProvider
+   → loads user from DB, verifies BCrypt hash
+   → throws BadCredentialsException on failure
+2. Reload User from DB (to get full entity, not just UserDetails)
+3. Generate JWT via JwtService
+4. Write JWT as HttpOnly cookie on the response
+5. Return AuthResponse
+```
+
+**Why `ResponseCookie` instead of servlet `Cookie`?**
+The servlet `Cookie` class has no `setSameSite()` method. `SameSite=Strict` tells browsers not to send the cookie on requests originating from other domains — this blocks CSRF attacks. `ResponseCookie` (Spring's class) supports it:
+```java
+ResponseCookie.from("jwt", token)
+    .httpOnly(true)
+    .secure(cookieSecure)   // false in dev, true in prod
+    .path("/")
+    .maxAge(Duration.ofDays(1))
+    .sameSite("Strict")
+    .build();
+```
+
+**`app.cookie.secure` from config:**
+```java
+@Value("${app.cookie.secure:false}")
+private boolean cookieSecure;
+```
+The `:false` default means dev works over HTTP without any config. Set `app.cookie.secure=true` in `application-prod.yml` when we reach Sprint 5.
+
+---
+
+### The 403 on Duplicate Email — Why It Happens
+
+When `AuthService.register()` throws `IllegalStateException`, Spring Boot tries to forward the request to `/error` to render the error. But `/error` isn't in the `permitAll()` list in `SecurityConfig` — Spring Security blocks it, returning **403** instead of the expected **500**.
+
+Fix: a `GlobalExceptionHandler` (`@RestControllerAdvice`) intercepts exceptions before they reach the `/error` forwarding step and returns clean JSON directly. Next thing to build in Sprint 1.
 
 ---
 

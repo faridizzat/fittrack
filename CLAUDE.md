@@ -2,7 +2,9 @@
 
 ## What is this project?
 A personal fitness tracker built to learn CI/CD and DevOps deeply.
-Full context: `docs/project-context.md`
+
+- Sprint progress + what we built: `docs/progress.md`
+- Architecture, concepts, the "why": `docs/learning-notes.md`
 
 ---
 
@@ -80,7 +82,7 @@ fix/jwt-refresh-token
 ---
 
 ## Current Sprint
-Check `docs/project-context.md` → Sprint Plan table for current status.
+Check `docs/progress.md` for current sprint status and what's been built.
 
 ---
 
