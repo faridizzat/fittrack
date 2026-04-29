@@ -9,7 +9,7 @@ A personal fitness tracker built to learn CI/CD and DevOps deeply.
 | Sprint | Focus | Status |
 |---|---|---|
 | 1 | Spring Boot setup, JWT auth (register/login), Supabase PostgreSQL | ✅ Done |
-| 2 | Workout CRUD endpoints, React frontend scaffold | ⬜ Not started |
+| 2 | Workout CRUD endpoints, React frontend scaffold | 🔄 In progress |
 | 3 | Dockerize backend, docker-compose for local dev | ⬜ Not started |
 | 4 | GitHub Actions CI (build + test + SonarQube) | ⬜ Not started |
 | 5 | CD pipeline — push Docker image, deploy to Render, deploy hook | ⬜ Not started |
@@ -64,6 +64,43 @@ A personal fitness tracker built to learn CI/CD and DevOps deeply.
 ### Still to do
 
 - ~~`GlobalExceptionHandler`~~ ✅ Done — `DuplicateEmailException` → 409, `AuthenticationException` → 401
+
+---
+
+## Sprint 2 — Workout CRUD + React Frontend Scaffold
+
+**Branch:** `feature/sprint-2-workout-crud`
+
+### What we built (Backend)
+
+| File | Purpose |
+|---|---|
+| `WorkoutType.java` | Enum: `CARDIO`, `STRENGTH`, `FLEXIBILITY` |
+| `Workout.java` | JPA entity — id, user, name, type, durationMins, notes, createdAt |
+| `WorkoutRepository.java` | Spring Data JPA — `findAllByUserId()`, `findByIdAndUserId()` |
+| `CreateWorkoutRequest.java` | DTO: name, type, durationMins, notes |
+| `UpdateWorkoutRequest.java` | DTO: name, type, durationMins, notes (all optional) |
+| `WorkoutResponse.java` | DTO: id, name, type, durationMins, notes, createdAt |
+| `WorkoutService.java` | CRUD: create, findAll, findById, update, delete |
+| `WorkoutController.java` | REST: `POST /api/workouts`, `GET /api/workouts`, `GET /{id}`, `PUT /{id}`, `DELETE /{id}` |
+| `WorkoutNotFoundException.java` | Exception → 404 handler |
+| `GlobalExceptionHandler.java` | Updated with 404 handler for missing workouts |
+
+### Key decisions
+
+- **Ownership check baked into queries** — `findByIdAndUserId()` prevents users from accessing others' workouts
+- **`@AuthenticationPrincipal User`** — Spring injects the authenticated user directly into controller methods
+- **Immutable DTOs as records** — no setter noise, clear contracts
+- **Soft updates** — null fields in `UpdateWorkoutRequest` mean "don't change"
+
+### Tested
+
+- Backend CRUD endpoints ready (not yet tested with actual requests)
+
+### Still to do
+
+- React frontend scaffold (Vite, Tailwind, React Router, API client, stub pages)
+- Test all endpoints with Postman / curl
 
 ---
 
