@@ -1,0 +1,9 @@
+spring:
+  datasource:
+    url: ${SUPABASE_URL}
+    username: postgres
+    password: ${SUPABASE_DB_PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
