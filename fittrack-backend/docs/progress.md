@@ -12,7 +12,7 @@ A personal fitness tracker built to learn CI/CD and DevOps deeply.
 |---|---|---|
 | 1 | Spring Boot setup, JWT auth (register/login), Supabase PostgreSQL | ✅ Done |
 | 2 | Workout CRUD endpoints, React frontend scaffold | ✅ Done |
-| 3 | Dockerize backend, docker-compose for local dev | ⬜ Not started |
+| 3 | Dockerize backend, docker-compose for local dev | ✅ Done |
 | 4 | GitHub Actions CI (build + test + SonarQube) | ⬜ Not started |
 | 5 | CD pipeline — push Docker image, deploy to Render, deploy hook | ⬜ Not started |
 | 6 | AI Coach feature (Tier 1) — Claude API integration | ⬜ Not started |
@@ -71,14 +71,14 @@ A personal fitness tracker built to learn CI/CD and DevOps deeply.
 
 ## Sprint 3 — Dockerize Backend & Docker Compose
 
-**Branch:** `feature/sprint-3-docker` (to be created)
+**Branch:** `feature/sprint-3-docker` (merged to master)
 
-### What we're building
+### What we built
 
 | File | Purpose |
 |---|---|
 | `fittrack-backend/Dockerfile` | Multi-stage build: Maven compile → JRE runtime |
-| `fittrack-frontend/Dockerfile` | Node image with npm dev server |
+| `fittrack-frontend/Dockerfile` | Node image with Vite dev server |
 | `docker-compose.yml` | Orchestrate backend + frontend locally |
 | `.dockerignore` (both) | Exclude build artifacts, git files |
 
@@ -89,20 +89,15 @@ A personal fitness tracker built to learn CI/CD and DevOps deeply.
 - **Service networking**: Inside Docker, `backend:8080` instead of `localhost:8080`
 - **Environment variables**: docker-compose reads from `.env` file for local dev
 - **Security**: .env is for local dev only; production uses secret managers (Sprint 5)
+- **Monorepo structure**: Both backend and frontend in single repo for easier orchestration
 
-### Current status
+### Status
 
-- ✅ Dockerfiles created (backend multi-stage, frontend dev server)
-- ✅ docker-compose.yml configured
-- ⏳ **Awaiting Podman installation** — user chose Podman over Docker
-- ⬜ Test with `podman-compose up`
-
-### Next steps
-
-1. Install Podman Desktop (or WSL2 + Podman)
-2. Run `podman-compose up` from root directory
-3. Verify backend on http://localhost:8080
-4. Verify frontend on http://localhost:5173
+- ✅ Dockerfiles created and tested (backend multi-stage, frontend Vite server)
+- ✅ docker-compose.yml configured with service networking
+- ✅ Both backend and frontend code in monorepo at https://github.com/faridizzat/fittrack
+- ✅ Merged to master branch
+- ⏳ Full integration testing deferred to Render deployment (Podman Windows networking limitation)
 
 ---
 
