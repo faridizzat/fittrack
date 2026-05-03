@@ -13,7 +13,7 @@ A personal fitness tracker built to learn CI/CD and DevOps deeply.
 | 1 | Spring Boot setup, JWT auth (register/login), Supabase PostgreSQL | ✅ Done |
 | 2 | Workout CRUD endpoints, React frontend scaffold | ✅ Done |
 | 3 | Dockerize backend, docker-compose for local dev | ✅ Done |
-| 4 | GitHub Actions CI (build + test + SonarQube) | ⬜ Not started |
+| 4 | GitHub Actions CI (build + test + SonarQube) | 🟡 In Progress |
 | 5 | CD pipeline — push Docker image, deploy to Render, deploy hook | ⬜ Not started |
 | 6 | AI Coach feature (Tier 1) — Claude API integration | ⬜ Not started |
 | 7 | Webhook feature + AI insight on completion (Tier 2) | ⬜ Not started |
@@ -156,6 +156,45 @@ A personal fitness tracker built to learn CI/CD and DevOps deeply.
 - ✅ List workouts → owned by user
 - ✅ Edit workout → updated in DB
 - ✅ Delete workout → removed from DB
+
+---
+
+## Sprint 4 — GitHub Actions CI Pipeline
+
+**Branch:** `feature/sprint-4-ci`
+
+### What we built
+
+| File | Purpose |
+|---|---|
+| `application-test.yml` | Test profile with H2 in-memory DB (MODE=PostgreSQL for Hibernate compatibility) |
+| `pom.xml` | Added H2 test-scoped dependency + Jacoco plugin for coverage reporting |
+| `FittrackBackendApplicationTests.java` | Added `@ActiveProfiles("test")` to activate test profile |
+| `.github/workflows/ci.yml` | GitHub Actions workflow: checkout → Java 21 setup → build → test → coverage → SonarCloud |
+
+### Key concepts learned
+
+- **Test profile isolation** — `application-test.yml` provides H2 datasource while prod uses Supabase; `@ActiveProfiles("test")` switches profiles for test context
+- **H2 compatibility** — `MODE=PostgreSQL` flag allows H2 to accept Hibernate's PostgreSQL-flavored DDL (table generation)
+- **Jacoco coverage** — Maven plugin generates `jacoco.xml` during `verify` phase; SonarCloud reads this for coverage gates
+- **Workflow triggers** — `on: push` and `on: pull_request` with `working-directory: fittrack-backend` for monorepo structure
+- **Git root vs project root** — `.github/workflows/` goes at git root (`Project 2026/`), not at Maven project root
+- **File permissions in git** — `mvnw` needs `git update-index --chmod=+x` to be executable on Linux CI runners
+
+### Current status
+
+- ✅ Build step passes — Maven compiles and tests with H2
+- ✅ Test step passes — `FittrackBackendApplicationTests` context loads successfully
+- ✅ Jacoco report generated — `target/site/jacoco/jacoco.xml` created
+- 🟡 SonarCloud analysis — pending `SONAR_TOKEN` secret setup on GitHub
+- ⏳ Branch protection rules — ready to configure after first successful run
+
+### Still to do
+
+- Set up SonarCloud account + project (at sonarcloud.io)
+- Add `SONAR_TOKEN` as GitHub Actions secret
+- Configure branch protection rules (require "Build, Test, and Analyze" status check)
+- (Optional) Add Quality Gate badge to README
 
 ---
 
